@@ -1,0 +1,9 @@
+dataset,model,chunk_size,retriever,top_k,em,f1,distraction_ratio,n_samples
+nq,Qwen3-0.6B,256,faiss,1,0.1033,0.1731,0.0,300
+nq,Qwen3-0.6B,256,faiss,5,0.1033,0.1853,0.0,300
+triviaqa,Qwen3-0.6B,256,faiss,1,0.3133,0.3941,0.0,300
+triviaqa,Qwen3-0.6B,256,faiss,5,0.3833,0.4684,0.0,300
+hotpotqa,Qwen3-0.6B,256,faiss,1,0.1667,0.2589,0.0,300
+hotpotqa,Qwen3-0.6B,256,faiss,5,0.1933,0.2837,0.0,300
+hotpotqa,Qwen3-1.7B,256,faiss,1,0.2533,0.3565,0.0,300
+hotpotqa,Qwen3-1.7B,256,faiss,5,0.3033,0.4334,0.0,300

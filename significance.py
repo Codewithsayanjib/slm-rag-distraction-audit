@@ -21,7 +21,6 @@ import pandas as pd
 from scipy import stats
 
 
-# ── Wilson CI ─────────────────────────────────────────────────────────────────
 
 def wilson_ci(p: float, n: int, z: float = 1.96) -> tuple[float, float]:
     """Wilson score confidence interval for a proportion."""
@@ -33,7 +32,6 @@ def wilson_ci(p: float, n: int, z: float = 1.96) -> tuple[float, float]:
     return max(0.0, centre - margin), min(1.0, centre + margin)
 
 
-# ── McNemar-style approximation via CIs ──────────────────────────────────────
 
 def cis_overlap(lo1: float, hi1: float, lo2: float, hi2: float) -> bool:
     return lo1 <= hi2 and lo2 <= hi1
@@ -43,13 +41,12 @@ def sig_label(p_lo: float, p_hi: float,
               q_lo: float, q_hi: float) -> str:
     """Return significance label based on CI non-overlap."""
     if cis_overlap(p_lo, p_hi, q_lo, q_hi):
-        return "ns"       # not significant
+        return "ns"
     if p_lo > q_hi:
-        return "↑ sig"    # first group significantly higher
-    return "↓ sig"        # first group significantly lower
+        return "↑ sig"
+    return "↓ sig"
 
 
-# ── main ──────────────────────────────────────────────────────────────────────
 
 def main(results_path: Path | None = None) -> None:
     if results_path is None:
@@ -59,7 +56,6 @@ def main(results_path: Path | None = None) -> None:
     df["chunk_size"] = df["chunk_size"].astype(str)
     n_col = "n_samples" if "n_samples" in df.columns else None
 
-    # ── Step 1: Compute CI for every row ─────────────────────────────────────
     rows = []
     for _, row in df.iterrows():
         p = float(row["em"])
@@ -82,7 +78,6 @@ def main(results_path: Path | None = None) -> None:
     ci_df.to_csv(out_dir / "significance_ci.csv", index=False)
     print(f"[significance] Saved per-config CIs → {out_dir}/significance_ci.csv")
 
-    # ── Step 2: RAG vs no-RAG pairwise significance ───────────────────────────
     baseline_rows = ci_df[ci_df["retriever"] == "no_rag"].set_index(
         ["dataset", "model"]
     )[["em", "ci_lo", "ci_hi"]]
@@ -115,7 +110,6 @@ def main(results_path: Path | None = None) -> None:
     pairs_df.to_csv(out_dir / "significance_rag_vs_baseline.csv", index=False)
     print(f"[significance] Saved RAG-vs-baseline tests → {out_dir}/significance_rag_vs_baseline.csv\n")
 
-    # ── Step 3: Summary ───────────────────────────────────────────────────────
     total = len(pairs_df)
     sig_up = (pairs_df["significance"] == "↑ sig").sum()
     sig_dn = (pairs_df["significance"] == "↓ sig").sum()
@@ -130,7 +124,6 @@ def main(results_path: Path | None = None) -> None:
     print(f"  Not significant          : {ns}  ({100*ns/total:.1f}%)")
     print()
 
-    # Per-dataset breakdown
     for ds in sorted(pairs_df["dataset"].unique()):
         sub = pairs_df[pairs_df["dataset"] == ds]
         up = (sub["significance"] == "↑ sig").sum()

@@ -29,7 +29,6 @@ from metrics import distraction_ratio, exact_match, token_f1
 from model_runner import generate_answer, load_model
 from retriever import build_retriever
 
-# ── what to run ───────────────────────────────────────────────────────────────
 
 TARGETS = [
     ("Qwen3-0.6B",  "nq"),
@@ -42,7 +41,6 @@ CHUNK_SIZE     = 256
 RETRIEVER_TYPE = "faiss"
 NUM_SAMPLES    = 300
 
-# Hardcoded from results.csv (no_rag baseline EM)
 BASELINE_EM = {
     ("Qwen3-0.6B", "nq"):       0.0267,
     ("Qwen3-0.6B", "triviaqa"): 0.0833,
@@ -52,7 +50,6 @@ BASELINE_EM = {
 
 OUT_CSV = RESULTS_DIR / "k_ablation_local.csv"
 
-# ── helpers ───────────────────────────────────────────────────────────────────
 
 def _flush() -> None:
     gc.collect()
@@ -80,7 +77,6 @@ def _append_row(row: dict) -> None:
         df_new.to_csv(OUT_CSV, index=False)
 
 
-# ── core run ──────────────────────────────────────────────────────────────────
 
 def run_config(model_name: str, dataset_name: str,
                samples: list[dict], top_k: int,
@@ -103,7 +99,6 @@ def run_config(model_name: str, dataset_name: str,
         em_list.append(em)
         f1_list.append(f1)
 
-        # Show raw answers during smoke test
         if smoke:
             print(f"    Q: {s['question'][:70]}")
             print(f"    A (gold): {s['answers'][:3]}  |  pred: '{pred}'  EM={em}")
@@ -127,7 +122,6 @@ def run_config(model_name: str, dataset_name: str,
     }
 
 
-# ── main ──────────────────────────────────────────────────────────────────────
 
 def main(smoke: bool = False) -> None:
     n = 3 if smoke else NUM_SAMPLES
@@ -142,17 +136,14 @@ def main(smoke: bool = False) -> None:
     for model_name, dataset_name in TARGETS:
         print(f"\n── {model_name}  ×  {dataset_name} ──")
 
-        # Load data once per (model, dataset)
         samples = prepare_dataset(dataset_name)[:n]
 
-        # Build retriever once per dataset (reused for k=1 and k=5)
         all_chunks: list[str] = []
         for s in samples:
             all_chunks.extend(chunk_text(s["document"], CHUNK_SIZE))
         print(f"  [index] faiss | cs={CHUNK_SIZE} | {len(all_chunks)} chunks")
         retriever = build_retriever(all_chunks, RETRIEVER_TYPE)
 
-        # Load model once per (model, dataset) pair
         load_model(model_name)
 
         for top_k in TOP_K_VALUES:

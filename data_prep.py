@@ -20,7 +20,6 @@ from tqdm import tqdm
 from config import CACHE_DIR, DATA_DIR, NUM_SAMPLES
 
 
-# ── helpers ─────────────────────────────────────────────────────────────────
 
 def _cache_key(question: str) -> str:
     return re.sub(r"[^\w]", "_", question[:60]).strip("_")
@@ -45,7 +44,6 @@ def _fetch_wikipedia(question: str, answers: list[str]) -> str | None:
     return None
 
 
-# ── per-dataset prep functions ───────────────────────────────────────────────
 
 def prepare_nq(n: int = NUM_SAMPLES, force_refresh: bool = False) -> list[dict]:
     DATA_DIR.mkdir(exist_ok=True)
@@ -105,7 +103,6 @@ def prepare_triviaqa(n: int = NUM_SAMPLES, force_refresh: bool = False) -> list[
         return json.loads(out.read_text())
 
     print("[data_prep] Loading TriviaQA rc validation split …")
-    # 'rc' config bundles Wikipedia entity_pages — no external API calls needed
     ds = load_dataset("mandarjoshi/trivia_qa", "rc", split="validation")
 
     samples: list[dict] = []
@@ -115,20 +112,17 @@ def prepare_triviaqa(n: int = NUM_SAMPLES, force_refresh: bool = False) -> list[
                 break
 
             question = item["question"]
-            # normalized_aliases gives cleaned answer variants (best for EM)
             answers  = item["answer"].get("normalized_aliases") or \
                        [item["answer"]["normalized_value"]]
             answers  = [a for a in answers if a.strip()]
             if not answers:
                 continue
 
-            # entity_pages.wiki_context is a list of Wikipedia article strings
             wiki_contexts = item.get("entity_pages", {}).get("wiki_context", [])
             wiki_contexts = [w for w in wiki_contexts if len(w.split()) >= 50]
             if not wiki_contexts:
                 continue
 
-            # Join all retrieved entity articles as the document
             document = "\n\n".join(wiki_contexts)
             if len(document.split()) < 250:
                 continue
@@ -153,7 +147,6 @@ def prepare_hotpotqa(n: int = NUM_SAMPLES, force_refresh: bool = False) -> list[
         return json.loads(out.read_text())
 
     print("[data_prep] Loading HotpotQA distractor validation split …")
-    # 'distractor' config: each item has 2 gold + 8 distractor paragraphs
     ds = load_dataset("hotpotqa/hotpot_qa", "distractor", split="validation")
 
     samples: list[dict] = []
@@ -167,7 +160,6 @@ def prepare_hotpotqa(n: int = NUM_SAMPLES, force_refresh: bool = False) -> list[
             if not answer:
                 continue
 
-            # context: dict with 'title' (list) and 'sentences' (list of lists)
             titles    = item["context"]["title"]
             sent_lists = item["context"]["sentences"]
 
@@ -177,7 +169,7 @@ def prepare_hotpotqa(n: int = NUM_SAMPLES, force_refresh: bool = False) -> list[
                 paragraphs.append(para)
 
             document = "\n\n".join(paragraphs)
-            if len(document.split()) < 100:   # HotpotQA docs are shorter by design
+            if len(document.split()) < 100:
                 continue
 
             samples.append({
@@ -191,7 +183,6 @@ def prepare_hotpotqa(n: int = NUM_SAMPLES, force_refresh: bool = False) -> list[
     return samples
 
 
-# ── unified dispatcher ───────────────────────────────────────────────────────
 
 def prepare_dataset(name: str, n: int = NUM_SAMPLES,
                     force_refresh: bool = False) -> list[dict]:
@@ -206,12 +197,10 @@ def prepare_dataset(name: str, n: int = NUM_SAMPLES,
     return dispatch[name](n=n, force_refresh=force_refresh)
 
 
-# kept for backward-compat with old experiment.py imports
 def prepare_data(force_refresh: bool = False) -> list[dict]:
     return prepare_nq(force_refresh=force_refresh)
 
 
-# ── CLI ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     import sys

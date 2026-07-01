@@ -1,16 +1,4 @@
 #!/usr/bin/env bash
-# watchdog.sh — runs experiment.py ONE CONFIG AT A TIME in a fresh subprocess.
-#
-# Exit codes from experiment.py --single-config:
-#   0  → grid complete, stop
-#   99 → completed one config, restart for next
-#   *  → crash, restart (up to MAX_CRASHES consecutive)
-#
-# Each config gets a guaranteed fresh MPS state because it runs in its own
-# Python process. This eliminates the cumulative MPS memory fragmentation
-# that was killing cs=512 on HotpotQA.
-#
-# Usage: bash watchdog.sh [nq|triviaqa|hotpotqa]
 
 set -u
 
@@ -23,8 +11,8 @@ cd "$DIR"
 source "$VENV"
 mkdir -p logs
 
-MAX_CRASHES=10            # max consecutive non-99 failures before giving up
-MAX_TOTAL_RUNS=300         # safety ceiling on total subprocess launches
+MAX_CRASHES=10
+MAX_TOTAL_RUNS=300
 crashes=0
 runs=0
 
@@ -43,7 +31,7 @@ while [ $runs -lt $MAX_TOTAL_RUNS ]; do
         exit 0
     elif [ $EXIT -eq 99 ]; then
         echo "[watchdog] Config completed (exit 99). Restarting for next …" | tee -a "$LOG"
-        crashes=0           # reset crash counter on successful completion
+        crashes=0
         sleep 2
     else
         crashes=$((crashes + 1))

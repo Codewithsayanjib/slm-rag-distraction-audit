@@ -19,14 +19,10 @@ import pandas as pd
 
 from config import CHUNK_SIZES, DATASETS, MODELS, RESULTS_DIR
 
-# Preferred display order — config.py may have some models commented out (e.g. Phi-3.5-mini
-# runs on Colab), so we build the order from config first, then append any extra models
-# found in the CSV that aren't in config.
 _CONFIG_ORDER = list(MODELS.keys())
-MODEL_ORDER = _CONFIG_ORDER  # updated after CSV is loaded (see main block)
+MODEL_ORDER = _CONFIG_ORDER
 
 
-# ── core plotting ─────────────────────────────────────────────────────────────
 
 def _matrix(df: pd.DataFrame, model_order: list[str],
             chunk_sizes: list[int], metric: str) -> np.ndarray:
@@ -62,7 +58,6 @@ def _heatmap(ax: plt.Axes, mat: np.ndarray, row_labels: list[str],
     plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
 
-# ── figure factories ──────────────────────────────────────────────────────────
 
 def plot_metric_grid(df: pd.DataFrame, retriever: str, metric: str,
                      dataset_name: str, out_dir: Path) -> None:
@@ -113,13 +108,12 @@ def plot_rag_gain(df: pd.DataFrame, retriever: str,
     print(f"  Saved {p.name}")
 
 
-# ── cross-dataset comparison plot ─────────────────────────────────────────────
 
 def plot_cross_dataset_em(df: pd.DataFrame, out_dir: Path) -> None:
     """3-panel figure: EM by chunk size for each dataset (best retriever per cell)."""
     available = [d for d in DATASETS if d in df["dataset"].unique()]
     if len(available) < 2:
-        return   # nothing to compare yet
+        return
 
     fig, axes = plt.subplots(1, len(available), figsize=(6 * len(available), 5),
                              sharey=True)
@@ -149,7 +143,6 @@ def plot_cross_dataset_em(df: pd.DataFrame, out_dir: Path) -> None:
     print(f"  Saved {p.name}")
 
 
-# ── terminal tables ───────────────────────────────────────────────────────────
 
 def print_summary_table(df: pd.DataFrame, dataset_name: str) -> None:
     print(f"\n{'='*70}")
@@ -184,7 +177,6 @@ def print_summary_table(df: pd.DataFrame, dataset_name: str) -> None:
     print()
 
 
-# ── entry point ───────────────────────────────────────────────────────────────
 
 def main(results_path: Path | None = None,
          only_dataset: str | None = None) -> None:
@@ -197,12 +189,9 @@ def main(results_path: Path | None = None,
     df = pd.read_csv(results_path)
     df["chunk_size"] = pd.to_numeric(df["chunk_size"], errors="coerce")
 
-    # Back-compat: if no dataset column, treat everything as nq
     if "dataset" not in df.columns:
         df["dataset"] = "nq"
 
-    # Rebuild MODEL_ORDER to include any models in the CSV not in config (e.g. Phi-3.5-mini
-    # which is commented out of config.py but runs on Colab and gets merged in later).
     global MODEL_ORDER
     csv_models = df["model"].unique().tolist()
     extra = [m for m in csv_models if m not in _CONFIG_ORDER]
@@ -228,7 +217,6 @@ def main(results_path: Path | None = None,
 
         print_summary_table(ds_df, ds_name)
 
-    # Cross-dataset comparison (only if multiple datasets present)
     plot_cross_dataset_em(df, out)
 
     print(f"[visualize] All figures written to {out}/")

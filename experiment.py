@@ -34,20 +34,18 @@ def _flush_memory() -> None:
     """Aggressively free MPS/CUDA cache and run GC between configs."""
     gc.collect()
     if DEVICE == "mps":
-        torch.mps.synchronize()   # wait for all MPS ops to complete first
+        torch.mps.synchronize()
         torch.mps.empty_cache()
     elif DEVICE == "cuda":
         torch.cuda.synchronize()
         torch.cuda.empty_cache()
 
 
-# ── paths ────────────────────────────────────────────────────────────────────
 
 PARTIAL = RESULTS_DIR / "results_partial.csv"
 FINAL   = RESULTS_DIR / "results.csv"
 
 
-# ── resume helpers ────────────────────────────────────────────────────────────
 
 def _migrate_csv(path: Path) -> None:
     """Add 'dataset' column (='nq') to legacy CSVs that predate multi-dataset support."""
@@ -87,7 +85,6 @@ def _save(results: list[dict]) -> None:
     pd.DataFrame(results).to_csv(PARTIAL, index=False)
 
 
-# ── no-RAG baseline ──────────────────────────────────────────────────────────
 
 def run_baseline(dataset_name: str, model_name: str, samples: list[dict]) -> dict:
     em_list, f1_list = [], []
@@ -108,12 +105,11 @@ def run_baseline(dataset_name: str, model_name: str, samples: list[dict]) -> dic
     }
 
 
-# ── RAG run ───────────────────────────────────────────────────────────────────
 
 def run_rag(dataset_name: str, model_name: str, samples: list[dict],
             chunk_size: int, retriever_type: str, baseline_em: float) -> dict:
 
-    _flush_memory()   # clear before building new corpus
+    _flush_memory()
 
     all_chunks: list[str] = []
     for s in samples:
@@ -133,11 +129,9 @@ def run_rag(dataset_name: str, model_name: str, samples: list[dict],
             pred = ""
         em_list.append(exact_match(pred, s["answers"]))
         f1_list.append(token_f1(pred, s["answers"]))
-        # Flush MPS cache every 10 samples to prevent accumulation
         if (idx + 1) % 10 == 0:
             _flush_memory()
 
-    # Explicitly free the retriever corpus from memory
     del retriever, all_chunks
     _flush_memory()
 
@@ -156,7 +150,6 @@ def run_rag(dataset_name: str, model_name: str, samples: list[dict],
     }
 
 
-# ── main ─────────────────────────────────────────────────────────────────────
 
 def run_experiment(only_dataset: str | None = None,
                    single_config: bool = False) -> pd.DataFrame:
@@ -180,7 +173,6 @@ def run_experiment(only_dataset: str | None = None,
         samples = prepare_dataset(dataset_name)[:NUM_SAMPLES]
 
         for model_name in MODELS:
-            # ── baseline ──────────────────────────────────────────────────────
             key_base = (dataset_name, model_name, "none", "no_rag")
             if key_base not in done:
                 print(f"\n{'─'*60}")
@@ -189,10 +181,10 @@ def run_experiment(only_dataset: str | None = None,
                 results.append(row)
                 done.add(key_base)
                 _save(results)
-                _flush_memory()   # clear MPS cache after baseline
+                _flush_memory()
                 print(f"  Baseline  EM={row['em']:.3f}  F1={row['f1']:.3f}")
                 if single_config:
-                    sys.exit(99)   # signal: more work to do, restart fresh
+                    sys.exit(99)
             else:
                 print(f"\n[skip] Baseline already done: [{dataset_name}] {model_name}")
 
@@ -203,7 +195,6 @@ def run_experiment(only_dataset: str | None = None,
                 and r["retriever"] == "no_rag"
             )
 
-            # ── RAG grid ──────────────────────────────────────────────────────
             for cs in CHUNK_SIZES:
                 for ret in RETRIEVERS:
                     key = (dataset_name, model_name, str(cs), ret)
@@ -215,12 +206,12 @@ def run_experiment(only_dataset: str | None = None,
                     results.append(row)
                     done.add(key)
                     _save(results)
-                    _flush_memory()   # clear MPS cache after every config
+                    _flush_memory()
                     print(f"  [{dataset_name}] cs={cs:4d}  {ret:5s}  "
                           f"EM={row['em']:.3f}  F1={row['f1']:.3f}  "
                           f"DR={row['distraction_ratio']:.3f}")
                     if single_config:
-                        sys.exit(99)   # signal: more work to do, restart fresh
+                        sys.exit(99)
 
     df = pd.DataFrame(results)
     df.to_csv(FINAL, index=False)

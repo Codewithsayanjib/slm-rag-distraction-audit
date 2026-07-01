@@ -42,8 +42,6 @@ MAX_K       = max(K_VALUES)
 OUT_RECALL  = RESULTS_DIR / "retrieval_quality.csv"
 OUT_VS_EM   = RESULTS_DIR / "retrieval_vs_em.csv"
 
-# Answers this short can't be reliably string-matched in context (e.g. HotpotQA
-# yes/no). We flag the fraction so the recall number can be read with that caveat.
 SHORT_ANSWER_CHARS = 3
 
 
@@ -67,7 +65,6 @@ def _is_short(answers: list[str]) -> bool:
 
 def run_config(dataset_name: str, samples: list[dict], chunk_size: int,
                retriever_type: str) -> dict:
-    # Pool every document's chunks into one index — exactly as experiment.py does.
     all_chunks: list[str] = []
     for s in samples:
         all_chunks.extend(chunk_text(s["document"], chunk_size))
@@ -81,7 +78,6 @@ def run_config(dataset_name: str, samples: list[dict], chunk_size: int,
         ranked = retriever.retrieve(s["question"], top_k=MAX_K)
         if _is_short(s["answers"]):
             short_count += 1
-        # recall@k: answer present in the top-k concatenation
         for k in K_VALUES:
             ctx_norm = _normalize("\n\n".join(ranked[:k]))
             if _answer_in_text(s["answers"], ctx_norm):
@@ -134,8 +130,6 @@ def main(smoke: bool = False) -> None:
     recall_df.to_csv(OUT_RECALL, index=False)
     print(f"\n[recall] Saved → {OUT_RECALL}")
 
-    # ── recall@3 vs EM@3: the distraction gap ────────────────────────────────
-    # Main experiment used TOP_K=3, so recall@3 is the directly comparable number.
     main_csv = RESULTS_DIR / "results.csv"
     if main_csv.exists():
         em = pd.read_csv(main_csv)
@@ -156,7 +150,6 @@ def main(smoke: bool = False) -> None:
         merged.to_csv(OUT_VS_EM, index=False)
         print(f"[gap]    Saved recall@3 vs EM@3 → {OUT_VS_EM}")
 
-        # Summary: mean recall vs mean EM per dataset
         print(f"\n{'='*60}")
         print("RETRIEVAL CEILING vs MODEL EM  (recall@3 averaged over models)")
         print(f"{'='*60}")

@@ -29,7 +29,6 @@ DATASET_ORDER = ["nq", "triviaqa", "hotpotqa"]
 DATASET_TITLE = {"nq": "NQ-open", "triviaqa": "TriviaQA", "hotpotqa": "HotpotQA"}
 K_VALUES = [1, 3, 5]
 
-# Distinct colors per model (consistent across panels)
 COLORS = {
     "SmolLM2-360M": "#888888",
     "Qwen3-0.6B":   "#1f77b4",
@@ -61,7 +60,6 @@ def main() -> None:
             ax.plot(ks, ems, marker="o", linewidth=2,
                     color=COLORS[model], label=model, zorder=3)
 
-            # no-RAG baseline as faint dashed horizontal line
             base = baselines.get((ds, model))
             if base is not None:
                 ax.axhline(base, color=COLORS[model], linestyle=":",
@@ -74,7 +72,6 @@ def main() -> None:
 
     axes[0].set_ylabel("Exact Match (EM)", fontsize=11)
 
-    # Single shared legend below
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="lower center", ncol=6,
                fontsize=10, frameon=False, bbox_to_anchor=(0.5, -0.04))
@@ -87,7 +84,6 @@ def main() -> None:
     plt.close(fig)
     print(f"[k-viz] Saved figure → {OUT_PNG}")
 
-    # ── best-k summary table ─────────────────────────────────────────────────
     rows = []
     for ds in DATASET_ORDER:
         for model in MODEL_ORDER:
@@ -110,7 +106,6 @@ def main() -> None:
     summary.to_csv(OUT_CSV, index=False)
     print(f"[k-viz] Saved summary → {OUT_CSV}\n")
 
-    # Print best-k counts
     print("Best-k distribution:")
     print(summary["best_k"].value_counts().sort_index().to_string())
     print("\nPer-dataset best-k:")

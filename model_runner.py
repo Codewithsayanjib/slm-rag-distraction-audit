@@ -17,7 +17,6 @@ _model_cache:     dict[str, AutoModelForCausalLM] = {}
 _tokenizer_cache: dict[str, AutoTokenizer]        = {}
 
 
-# ── loading ──────────────────────────────────────────────────────────────────
 
 def _evict_all() -> None:
     for k in list(_model_cache):
@@ -62,7 +61,6 @@ def load_model(model_name: str) -> tuple[AutoModelForCausalLM, AutoTokenizer]:
     return mdl, tok
 
 
-# ── prompt building ───────────────────────────────────────────────────────────
 
 _SYS_NOTHINK = "Respond concisely. Do NOT use chain-of-thought or extended reasoning."
 
@@ -82,7 +80,6 @@ def _build_messages(model_name: str, question: str,
 
     cfg = MODELS[model_name]
     if cfg["thinking"]:
-        # Prepend /nothink to suppress chain-of-thought
         user = "/nothink\n" + user
 
     return [{"role": "user", "content": user}]
@@ -92,7 +89,6 @@ def build_prompt(model_name: str, question: str,
                  context: Optional[str], tokenizer: AutoTokenizer) -> str:
     messages = _build_messages(model_name, question, context)
 
-    # Try enable_thinking=False kwarg (transformers >= 4.51 + Qwen3)
     cfg = MODELS[model_name]
     extra = {}
     if cfg["thinking"]:
@@ -102,18 +98,16 @@ def build_prompt(model_name: str, question: str,
                 enable_thinking=False, **extra,
             )
         except TypeError:
-            pass   # older transformers or non-Qwen3 — fall through
+            pass
 
     try:
         return tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True,
         )
     except Exception:
-        # Bare fallback for models without a chat template
         return messages[0]["content"] + "\n"
 
 
-# ── generation ───────────────────────────────────────────────────────────────
 
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
 
@@ -141,10 +135,8 @@ def generate_answer(model_name: str, question: str,
     new_ids = out[0][inputs["input_ids"].shape[1]:]
     raw     = tok.decode(new_ids, skip_special_tokens=True).strip()
 
-    # Strip any residual thinking tags
     raw = _THINK_RE.sub("", raw).strip()
 
-    # Return first non-empty line
     for line in raw.splitlines():
         line = line.strip()
         if line:

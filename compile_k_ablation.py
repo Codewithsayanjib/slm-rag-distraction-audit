@@ -26,15 +26,12 @@ PROJECT   = Path(__file__).parent
 MAIN_CSV  = PROJECT / "results" / "results.csv"
 OUT_CSV   = PROJECT / "results" / "k_ablation.csv"
 
-# ── Load sources ──────────────────────────────────────────────────────────────
 
 partial   = pd.read_csv(DOWNLOADS / "k_ablation_partial (1).csv")
 remaining = pd.read_csv(DOWNLOADS / "k_ablation_remaining.csv")
 main      = pd.read_csv(MAIN_CSV)
 local     = pd.read_csv(PROJECT / "results" / "k_ablation_local.csv")
 
-# ── Source A: k=1,5 from NQ + TriviaQA (Colab partial run) ──────────────────
-# Keep: k ∈ {1,5}, not no_rag, not Qwen3-0.6B (broken zeros on Colab)
 src_a = partial[
     partial["top_k"].isin([1, 5]) &
     (partial["retriever"] != "no_rag") &
@@ -42,8 +39,6 @@ src_a = partial[
 ].copy()
 print(f"Source A (partial k=1,5 NQ+TriviaQA): {len(src_a)} rows")
 
-# ── Source B: k=1,5 from HotpotQA (Colab remaining run) ─────────────────────
-# Keep: valid models only (exclude both Qwen3 — Qwen3-0.6B broken, Qwen3-1.7B zeros)
 src_b = remaining[
     remaining["top_k"].isin([1, 5]) &
     (remaining["retriever"] != "no_rag") &
@@ -51,23 +46,19 @@ src_b = remaining[
 ].copy()
 print(f"Source B (remaining k=1,5 HotpotQA):  {len(src_b)} rows")
 
-# ── Source D: k=1,5 for Qwen3 models from local fix run ──────────────────────
 src_d = local[local["top_k"].isin([1, 5])].copy()
 src_d["chunk_size"] = src_d["chunk_size"].astype(str)
 print(f"Source D (local fix Qwen3 k=1,5):     {len(src_d)} rows")
 
-# ── Source C-1: k=3 from results.csv (cs=256, faiss, all 6 models) ───────────
 k3 = main[
     (main["retriever"] == "faiss") &
     (main["chunk_size"].astype(str) == "256")
 ].copy()
 k3["top_k"] = 3
-# Ensure column order matches k-ablation files
 k3 = k3[["dataset","model","chunk_size","retriever","top_k","em","f1",
           "distraction_ratio","n_samples"]]
 print(f"Source C-1 (k=3 from results.csv):     {len(k3)} rows")
 
-# ── Source C-2: no_rag baselines from results.csv ────────────────────────────
 no_rag = main[main["retriever"] == "no_rag"].copy()
 no_rag["top_k"] = 0
 no_rag["chunk_size"] = "none"
@@ -75,8 +66,6 @@ no_rag = no_rag[["dataset","model","chunk_size","retriever","top_k","em","f1",
                   "distraction_ratio","n_samples"]]
 print(f"Source C-2 (no_rag from results.csv):  {len(no_rag)} rows")
 
-# ── Combine ───────────────────────────────────────────────────────────────────
-# Align columns before concat
 col_order = ["dataset","model","chunk_size","retriever","top_k","em","f1",
              "distraction_ratio","n_samples"]
 
@@ -88,7 +77,6 @@ combined = pd.concat(
     ignore_index=True
 )
 
-# ── Sort ──────────────────────────────────────────────────────────────────────
 MODEL_ORDER = ["SmolLM2-360M","Qwen3-0.6B","Gemma-2-2B",
                "Qwen3-1.7B","Llama-3.2-1B","Phi-3.5-mini"]
 DATASET_ORDER = ["nq","triviaqa","hotpotqa"]
@@ -103,7 +91,6 @@ combined = (combined
 combined.to_csv(OUT_CSV, index=False)
 print(f"\nWrote {len(combined)} rows → {OUT_CSV}")
 
-# ── Coverage report ───────────────────────────────────────────────────────────
 print("\n=== COVERAGE (rows per model × dataset × top_k) ===")
 rag_only = combined[combined["top_k"] > 0]
 pivot = (rag_only

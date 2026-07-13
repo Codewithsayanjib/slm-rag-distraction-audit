@@ -184,8 +184,8 @@ If this work is useful to you, please cite:
 
 ## 👥 Authors
 
-**Swarnapravo Tripathi** · **Souvik Kundu** — *Heritage Institute of Technology, Kolkata*
-**Sayanjib Sur** · **Pawan Kumar Singh** — *Jadavpur University, Kolkata*
+**Swarnapravo Tripathi**, **Souvik Kundu** — *Heritage Institute of Technology, Kolkata*
+**Sayanjib Sur**, **Pawan Kumar Singh** — *Jadavpur University, Kolkata*
 
 <div align="center">
 <img src="https://capsule-render.vercel.app/api?type=waving&color=0:2E75B6,100:1F4E79&height=90&section=footer" width="100%"/>

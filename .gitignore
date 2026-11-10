@@ -3,3 +3,10 @@
 __pycache__/
 *.pyc
 cache/
+
+# Paper and Review artifacts (unnecessary in code repository)
+*.tex
+*.pdf
+REVIEWER_RESPONSE.*
+REVISION_CHANGE_LOG.*
+

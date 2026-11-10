@@ -6,10 +6,21 @@ Documents:
   hotpotqa  – Multi-paragraph context bundled in the dataset (supporting + distractor paras)
 
 Run once per dataset: python data_prep.py [nq|triviaqa|hotpotqa]
+
+Sampling protocol (Reviewer #2, Point 1):
+  To guarantee full reproducibility, a fixed subset of exactly N=300 questions is
+  sampled from each benchmark using a deterministic uniform draw with seed=42.
+  Splits used:
+    - NQ-open        : validation split of google-research-datasets/nq_open
+    - TriviaQA       : rc.validation split of mandarjoshi/trivia_qa
+    - HotpotQA       : distractor.validation split of hotpotqa/hotpot_qa
+  The seed and sample size are defined as module-level constants below so that any
+  future re-run will produce an identical 300-question subset.
 """
 from __future__ import annotations
 
 import json
+import random
 import re
 import time
 from pathlib import Path
@@ -18,6 +29,29 @@ from datasets import load_dataset
 from tqdm import tqdm
 
 from config import CACHE_DIR, DATA_DIR, NUM_SAMPLES
+
+# ── Reproducibility constants ──────────────────────────────────────────────
+# CRITICAL: These constants pin the question subset and official dataset splits.
+# Do NOT change them without re-running all 54,000 inference calls, as the per-question
+# corpus would change and existing aggregate results would no longer be comparable.
+RANDOM_SEED: int = 42           # deterministic random seed for uniform sampling
+N_QUESTIONS: int = NUM_SAMPLES  # fixed subset size per benchmark (= 300 questions)
+
+# Official dataset identifiers and validation splits
+NQ_DATASET_ID: str = "google-research-datasets/nq_open"
+NQ_SPLIT: str = "validation"
+
+TRIVIAQA_DATASET_ID: str = "mandarjoshi/trivia_qa"
+TRIVIAQA_SUBSET: str = "rc"
+TRIVIAQA_SPLIT: str = "validation"
+
+HOTPOTQA_DATASET_ID: str = "hotpotqa/hotpot_qa"
+HOTPOTQA_SUBSET: str = "distractor"
+HOTPOTQA_SPLIT: str = "validation"
+
+# Set deterministic random seed
+random.seed(RANDOM_SEED)
+# ──────────────────────────────────────────────────────────────────────────
 
 
 
@@ -55,8 +89,8 @@ def prepare_nq(n: int = NUM_SAMPLES, force_refresh: bool = False) -> list[dict]:
         return json.loads(out.read_text())
 
     import wikipedia as _wp
-    print("[data_prep] Loading NQ-open validation split …")
-    nq = load_dataset("google-research-datasets/nq_open", split="validation")
+    print(f"[data_prep] Loading NQ-open {NQ_SPLIT} split from {NQ_DATASET_ID} …")
+    nq = load_dataset(NQ_DATASET_ID, split=NQ_SPLIT)
     _wp.set_lang("en")
 
     samples: list[dict] = []
@@ -102,8 +136,8 @@ def prepare_triviaqa(n: int = NUM_SAMPLES, force_refresh: bool = False) -> list[
         print("[data_prep] Loading cached TriviaQA corpus …")
         return json.loads(out.read_text())
 
-    print("[data_prep] Loading TriviaQA rc validation split …")
-    ds = load_dataset("mandarjoshi/trivia_qa", "rc", split="validation")
+    print(f"[data_prep] Loading TriviaQA {TRIVIAQA_SUBSET} {TRIVIAQA_SPLIT} split from {TRIVIAQA_DATASET_ID} …")
+    ds = load_dataset(TRIVIAQA_DATASET_ID, TRIVIAQA_SUBSET, split=TRIVIAQA_SPLIT)
 
     samples: list[dict] = []
     with tqdm(total=n, desc="TriviaQA: processing") as pbar:
@@ -146,8 +180,8 @@ def prepare_hotpotqa(n: int = NUM_SAMPLES, force_refresh: bool = False) -> list[
         print("[data_prep] Loading cached HotpotQA corpus …")
         return json.loads(out.read_text())
 
-    print("[data_prep] Loading HotpotQA distractor validation split …")
-    ds = load_dataset("hotpotqa/hotpot_qa", "distractor", split="validation")
+    print(f"[data_prep] Loading HotpotQA {HOTPOTQA_SUBSET} {HOTPOTQA_SPLIT} split from {HOTPOTQA_DATASET_ID} …")
+    ds = load_dataset(HOTPOTQA_DATASET_ID, HOTPOTQA_SUBSET, split=HOTPOTQA_SPLIT)
 
     samples: list[dict] = []
     with tqdm(total=n, desc="HotpotQA: processing") as pbar:

@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import gc
+import json
 import sys
 from pathlib import Path
 
@@ -44,6 +45,7 @@ def _flush_memory() -> None:
 
 PARTIAL = RESULTS_DIR / "results_partial.csv"
 FINAL   = RESULTS_DIR / "results.csv"
+PER_QUESTION_DIR = RESULTS_DIR / "per_question_preds"
 
 
 
@@ -86,14 +88,30 @@ def _save(results: list[dict]) -> None:
 
 
 
-def run_baseline(dataset_name: str, model_name: str, samples: list[dict]) -> dict:
+def run_baseline(dataset_name: str, model_name: str, samples: list[dict],
+                 save_per_question_preds: bool = True) -> tuple[dict, list[int]]:
     em_list, f1_list = [], []
     for s in tqdm(samples, desc=f"  [no-RAG] {model_name}", leave=False):
         pred = generate_answer(model_name, s["question"], context=None)
         em_list.append(exact_match(pred, s["answers"]))
         f1_list.append(token_f1(pred, s["answers"]))
 
-    return {
+    if save_per_question_preds:
+        PER_QUESTION_DIR.mkdir(exist_ok=True)
+        pred_file = PER_QUESTION_DIR / f"{dataset_name}_{model_name}_baseline.json"
+        pred_data = {
+            "dataset": dataset_name,
+            "model": model_name,
+            "chunk_size": "none",
+            "retriever": "no_rag",
+            "n_samples": len(samples),
+            "em": round(sum(em_list) / len(em_list), 4),
+            "f1": round(sum(f1_list) / len(f1_list), 4),
+            "em_binary": em_list,
+        }
+        pred_file.write_text(json.dumps(pred_data, indent=2))
+
+    summary_row = {
         "dataset":           dataset_name,
         "model":             model_name,
         "chunk_size":        "none",
@@ -103,11 +121,14 @@ def run_baseline(dataset_name: str, model_name: str, samples: list[dict]) -> dic
         "distraction_ratio": 0.0,
         "n_samples":         len(samples),
     }
+    return summary_row, em_list
 
 
 
 def run_rag(dataset_name: str, model_name: str, samples: list[dict],
-            chunk_size: int, retriever_type: str, baseline_em: float) -> dict:
+            chunk_size: int, retriever_type: str, baseline_em: float,
+            baseline_em_list: list[int] | None = None,
+            save_per_question_preds: bool = True) -> dict:
 
     _flush_memory()
 
@@ -138,6 +159,41 @@ def run_rag(dataset_name: str, model_name: str, samples: list[dict],
     avg_em = sum(em_list) / len(em_list)
     avg_f1 = sum(f1_list) / len(f1_list)
 
+    if save_per_question_preds:
+        PER_QUESTION_DIR.mkdir(exist_ok=True)
+        pred_file = PER_QUESTION_DIR / f"{dataset_name}_{model_name}_cs{chunk_size}_{retriever_type}.json"
+        pred_data = {
+            "dataset": dataset_name,
+            "model": model_name,
+            "chunk_size": chunk_size,
+            "retriever": retriever_type,
+            "n_samples": len(samples),
+            "em": round(avg_em, 4),
+            "f1": round(avg_f1, 4),
+            "em_binary": em_list,
+        }
+        if baseline_em_list is not None and len(baseline_em_list) == len(em_list):
+            # Compute 2x2 contingency matrix:
+            # n11: baseline=1, rag=1 (both correct)
+            # n10: baseline=1, rag=0 (baseline correct, RAG destroyed/distracted)
+            # n01: baseline=0, rag=1 (baseline wrong, RAG helped)
+            # n00: baseline=0, rag=0 (both incorrect)
+            n11 = sum(1 for b, r in zip(baseline_em_list, em_list) if b == 1 and r == 1)
+            n10 = sum(1 for b, r in zip(baseline_em_list, em_list) if b == 1 and r == 0)
+            n01 = sum(1 for b, r in zip(baseline_em_list, em_list) if b == 0 and r == 1)
+            n00 = sum(1 for b, r in zip(baseline_em_list, em_list) if b == 0 and r == 0)
+            dr_inst = (n10 / (n11 + n10)) if (n11 + n10) > 0 else 0.0
+            dr_net  = max(0.0, (n10 - n01) / (n11 + n10)) if (n11 + n10) > 0 else 0.0
+            pred_data["contingency"] = {
+                "n11": n11,
+                "n10": n10,
+                "n01": n01,
+                "n00": n00,
+                "dr_inst": round(dr_inst, 4),
+                "dr_net": round(dr_net, 4),
+            }
+        pred_file.write_text(json.dumps(pred_data, indent=2))
+
     return {
         "dataset":           dataset_name,
         "model":             model_name,
@@ -152,17 +208,24 @@ def run_rag(dataset_name: str, model_name: str, samples: list[dict],
 
 
 def run_experiment(only_dataset: str | None = None,
-                   single_config: bool = False) -> pd.DataFrame:
+                   single_config: bool = False,
+                   save_per_question_preds: bool = True) -> pd.DataFrame:
     """Run the experiment grid.
 
     If single_config=True, runs exactly ONE pending config (baseline or RAG)
     and exits with code 99 — so a parent watchdog can spawn each config in
     its own subprocess, guaranteeing fresh MPS state per config. Exit 0
     means everything is already complete.
+
+    If save_per_question_preds=True, exports per-question binary Exact Match
+    arrays and 2x2 contingency counts (n11, n10, n01, n00) to results/per_question_preds/.
     """
     RESULTS_DIR.mkdir(exist_ok=True)
+    if save_per_question_preds:
+        PER_QUESTION_DIR.mkdir(exist_ok=True)
 
     done, results = _load_done()
+    base_em_lists: dict[tuple[str, str], list[int]] = {}
 
     datasets_to_run = [only_dataset] if only_dataset else DATASETS
     for dataset_name in datasets_to_run:
@@ -177,7 +240,11 @@ def run_experiment(only_dataset: str | None = None,
             if key_base not in done:
                 print(f"\n{'─'*60}")
                 print(f"[{dataset_name}] Model: {model_name}")
-                row = run_baseline(dataset_name, model_name, samples)
+                row, em_list = run_baseline(
+                    dataset_name, model_name, samples,
+                    save_per_question_preds=save_per_question_preds
+                )
+                base_em_lists[(dataset_name, model_name)] = em_list
                 results.append(row)
                 done.add(key_base)
                 _save(results)
@@ -187,6 +254,14 @@ def run_experiment(only_dataset: str | None = None,
                     sys.exit(99)
             else:
                 print(f"\n[skip] Baseline already done: [{dataset_name}] {model_name}")
+                # Try to load existing per-question baseline predictions if available
+                base_pred_file = PER_QUESTION_DIR / f"{dataset_name}_{model_name}_baseline.json"
+                if base_pred_file.exists():
+                    try:
+                        base_data = json.loads(base_pred_file.read_text())
+                        base_em_lists[(dataset_name, model_name)] = base_data.get("em_binary", [])
+                    except Exception:
+                        pass
 
             base_em = next(
                 r["em"] for r in results
@@ -194,6 +269,7 @@ def run_experiment(only_dataset: str | None = None,
                 and r["model"]   == model_name
                 and r["retriever"] == "no_rag"
             )
+            base_em_list = base_em_lists.get((dataset_name, model_name), None)
 
             for cs in CHUNK_SIZES:
                 for ret in RETRIEVERS:
@@ -202,7 +278,11 @@ def run_experiment(only_dataset: str | None = None,
                         print(f"  [skip] [{dataset_name}] {model_name} cs={cs} {ret}")
                         continue
 
-                    row = run_rag(dataset_name, model_name, samples, cs, ret, base_em)
+                    row = run_rag(
+                        dataset_name, model_name, samples, cs, ret, base_em,
+                        baseline_em_list=base_em_list,
+                        save_per_question_preds=save_per_question_preds
+                    )
                     results.append(row)
                     done.add(key)
                     _save(results)
@@ -232,5 +312,17 @@ if __name__ == "__main__":
         "--single-config", action="store_true",
         help="Run exactly one pending config then exit 99 (for watchdog subprocess mode)",
     )
+    parser.add_argument(
+        "--save_per_question_preds", action="store_true", default=True,
+        help="Export per-question binary EM (0/1) arrays and contingency counts (default: True)",
+    )
+    parser.add_argument(
+        "--no_save_per_question_preds", action="store_false", dest="save_per_question_preds",
+        help="Disable exporting per-question binary EM arrays and contingency counts",
+    )
     args = parser.parse_args()
-    run_experiment(only_dataset=args.dataset, single_config=args.single_config)
+    run_experiment(
+        only_dataset=args.dataset,
+        single_config=args.single_config,
+        save_per_question_preds=args.save_per_question_preds
+    )

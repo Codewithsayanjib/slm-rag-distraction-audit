@@ -30,14 +30,11 @@ from tqdm import tqdm
 
 from config import CACHE_DIR, DATA_DIR, NUM_SAMPLES
 
-# ── Reproducibility constants ──────────────────────────────────────────────
-# CRITICAL: These constants pin the question subset and official dataset splits.
-# Do NOT change them without re-running all 54,000 inference calls, as the per-question
-# corpus would change and existing aggregate results would no longer be comparable.
-RANDOM_SEED: int = 42           # deterministic random seed for uniform sampling
-N_QUESTIONS: int = NUM_SAMPLES  # fixed subset size per benchmark (= 300 questions)
 
-# Official dataset identifiers and validation splits
+RANDOM_SEED: int = 42
+N_QUESTIONS: int = NUM_SAMPLES
+
+
 NQ_DATASET_ID: str = "google-research-datasets/nq_open"
 NQ_SPLIT: str = "validation"
 
@@ -49,10 +46,8 @@ HOTPOTQA_DATASET_ID: str = "hotpotqa/hotpot_qa"
 HOTPOTQA_SUBSET: str = "distractor"
 HOTPOTQA_SPLIT: str = "validation"
 
-# Set deterministic random seed
-random.seed(RANDOM_SEED)
-# ──────────────────────────────────────────────────────────────────────────
 
+random.seed(RANDOM_SEED)
 
 
 def _cache_key(question: str) -> str:
@@ -76,7 +71,6 @@ def _fetch_wikipedia(question: str, answers: list[str]) -> str | None:
         except Exception:
             continue
     return None
-
 
 
 def prepare_nq(n: int = NUM_SAMPLES, force_refresh: bool = False) -> list[dict]:
@@ -217,7 +211,6 @@ def prepare_hotpotqa(n: int = NUM_SAMPLES, force_refresh: bool = False) -> list[
     return samples
 
 
-
 def prepare_dataset(name: str, n: int = NUM_SAMPLES,
                     force_refresh: bool = False) -> list[dict]:
     """Return up to `n` samples for the named dataset."""
@@ -233,7 +226,6 @@ def prepare_dataset(name: str, n: int = NUM_SAMPLES,
 
 def prepare_data(force_refresh: bool = False) -> list[dict]:
     return prepare_nq(force_refresh=force_refresh)
-
 
 
 if __name__ == "__main__":

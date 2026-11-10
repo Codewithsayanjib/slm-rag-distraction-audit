@@ -38,7 +38,7 @@ from scipy import stats
 from statsmodels.stats.multitest import multipletests
 from statsmodels.stats.proportion import proportion_confint, proportions_ztest
 
-# ── Paths ──────────────────────────────────────────────────────────────────
+
 ROOT        = Path(__file__).resolve().parent.parent
 RESULTS_DIR = ROOT / "results"
 
@@ -49,15 +49,13 @@ RETRIEVAL_CSV     = RESULTS_DIR / "retrieval_quality.csv"
 OUT_108   = RESULTS_DIR / "108_rag_vs_baseline_comparisons.csv"
 OUT_180   = RESULTS_DIR / "full_180_experiment_matrix.csv"
 
-# ── Constants ───────────────────────────────────────────────────────────────
-# Fixed sample size per configuration (N = 300 questions per cell).
+
 N_SAMPLES: int = 300
 
-# Wilson CI confidence level
-CI_ALPHA: float = 0.05  # 95 % Wilson confidence intervals
+
+CI_ALPHA: float = 0.05
 
 
-# ── Helper: Wilson 95% CI ───────────────────────────────────────────────────
 def wilson_ci(successes: int, n: int) -> tuple[float, float]:
     """Return (low, high) of a 95 % Wilson score confidence interval."""
     if n == 0:
@@ -72,7 +70,6 @@ def ci_non_overlapping(lo1: float, hi1: float,
     return hi1 < lo2 or hi2 < lo1
 
 
-# ── Load saved aggregate results ────────────────────────────────────────────
 def load_results() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Load the three pre-computed result files from disk.
 
@@ -102,7 +99,6 @@ def load_results() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     return main_df, k_ablation_df, retrieval_df
 
 
-# ── Build 108-comparison table ───────────────────────────────────────────────
 def build_108_table(main_df: pd.DataFrame,
                     retrieval_df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -113,7 +109,7 @@ def build_108_table(main_df: pd.DataFrame,
     model × dataset cell.  Statistical tests use the fixed N=300 aggregate EM
     proportions stored in results/results.csv.
     """
-    # Separate baseline rows from RAG rows
+
     baseline_df = main_df[main_df["retriever"] == "no_rag"].copy()
     rag_df      = main_df[main_df["retriever"] != "no_rag"].copy()
 
@@ -122,9 +118,7 @@ def build_108_table(main_df: pd.DataFrame,
         for _, r in baseline_df.iterrows()
     }
 
-    # Build a lookup for recall@k.  The retrieval_quality.csv stores recall
-    # per (dataset, chunk_size, retriever) — shared across all models.
-    # We use recall@3 as the representative value (experiment TOP_K=3).
+
     retrieval_lookup: dict[tuple[str, int, str], float] = {
         (r["dataset"], int(r["chunk_size"]), r["retriever"]): float(r["recall_at_3"])
         for _, r in retrieval_df.iterrows()
@@ -154,24 +148,22 @@ def build_108_table(main_df: pd.DataFrame,
 
         delta_em = round(em_rag - em_base, 4)
 
-        # Net Distraction Ratio (Equation 1):
-        # DR_net = max(0, (EM_base - EM_rag) / EM_base)  for EM_base > 0
+
         if em_base > 0:
             dr_net = max(0.0, (em_base - em_rag) / em_base)
         else:
             dr_net = 0.0
         dr_net = round(dr_net, 4)
 
-        # recall@3 for this (dataset, chunk_size, retriever) configuration
-        # (shared across models; identical retrieved passages for all 6 models)
+
         retrieval_key = (dataset, chunk_size, retriever)
         recall_at_k = retrieval_lookup.get(retrieval_key, float("nan"))
 
-        # ── Wilson 95% CIs ───────────────────────────────────────────────
+
         wb_lo, wb_hi = wilson_ci(k_base, n)
         wr_lo, wr_hi = wilson_ci(k_rag,  n)
 
-        # Significance via non-overlapping Wilson CIs
+
         if ci_non_overlapping(wb_lo, wb_hi, wr_lo, wr_hi):
             if em_rag > em_base:
                 wilson_sig = "Helped"
@@ -180,8 +172,7 @@ def build_108_table(main_df: pd.DataFrame,
         else:
             wilson_sig = "No Sig. Diff"
 
-        # ── Two-proportion z-test ────────────────────────────────────────
-        # H0: p_base == p_rag  (two-sided)
+
         counts  = np.array([k_rag,  k_base])
         nobs    = np.array([n,       n])
         if k_base == 0 and k_rag == 0:
@@ -190,8 +181,7 @@ def build_108_table(main_df: pd.DataFrame,
             _, ztest_pval = proportions_ztest(counts, nobs, alternative="two-sided")
         ztest_pval = float(ztest_pval)
 
-        # ── Fisher's exact test ──────────────────────────────────────────
-        # 2×2 contingency table: [[k_rag, n-k_rag], [k_base, n-k_base]]
+
         contingency = np.array([[k_rag,  n - k_rag],
                                  [k_base, n - k_base]])
         _, fisher_pval = stats.fisher_exact(contingency, alternative="two-sided")
@@ -202,7 +192,7 @@ def build_108_table(main_df: pd.DataFrame,
             "dataset":             dataset,
             "retriever":           retriever,
             "chunk_size":          chunk_size,
-            "top_k":               3,            # fixed TOP_K=3 for all main-grid runs
+            "top_k":               3,
             "em_base":             round(em_base, 4),
             "em_rag":              round(em_rag, 4),
             "delta_em":            delta_em,
@@ -219,19 +209,18 @@ def build_108_table(main_df: pd.DataFrame,
             "wilson_sig_status":   wilson_sig,
             "ztest_pval":          round(ztest_pval, 6),
             "fisher_exact_pval":   round(fisher_pval, 6),
-            # placeholders — filled after full table is assembled
+
             "pval_holm_adjusted":  None,
             "pval_fdr_bh_adjusted": None,
         })
 
     df = pd.DataFrame(rows)
 
-    # ── Multiple-testing correction across all 108 comparisons ──────────────
-    # Apply both Holm-Bonferroni and FDR-BH corrections to the z-test p-values.
+
     pvals = df["ztest_pval"].values.astype(float)
-    # Holm-Bonferroni (step-down Bonferroni)
+
     _, pvals_holm, _, _ = multipletests(pvals, alpha=0.05, method="holm")
-    # Benjamini-Hochberg FDR
+
     _, pvals_bh,   _, _ = multipletests(pvals, alpha=0.05, method="fdr_bh")
 
     df["pval_holm_adjusted"]   = np.round(pvals_holm, 6)
@@ -240,7 +229,6 @@ def build_108_table(main_df: pd.DataFrame,
     return df
 
 
-# ── Build 180-run full experiment ledger ────────────────────────────────────
 def build_180_matrix(main_df: pd.DataFrame,
                      k_ablation_df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -252,17 +240,15 @@ def build_180_matrix(main_df: pd.DataFrame,
       dataset, model, chunk_size, retriever, top_k, em, f1,
       distraction_ratio, n_samples
     """
-    # ── 1. No-RAG baselines (18 rows) ───────────────────────────────────
+
     baseline_rows = main_df[main_df["retriever"] == "no_rag"].copy()
     baseline_rows = baseline_rows.assign(run_type="No-RAG Baseline", top_k=0)
 
-    # ── 2. Main RAG grid (108 rows) ──────────────────────────────────────
+
     rag_rows = main_df[main_df["retriever"] != "no_rag"].copy()
     rag_rows = rag_rows.assign(run_type="Main RAG Grid", top_k=3)
 
-    # ── 3. Top-k ablation (54 rows = 6 models × 3 datasets × 3 k values) ─
-    # k_ablation.csv may contain the baseline rows too (top_k == 0 / no_rag).
-    # Keep only the actual ablation RAG rows.
+
     if "top_k" in k_ablation_df.columns:
         abl_rag = k_ablation_df[
             (k_ablation_df["retriever"] != "no_rag") &
@@ -270,10 +256,10 @@ def build_180_matrix(main_df: pd.DataFrame,
             (k_ablation_df["top_k"] != 0)
         ].copy()
     else:
-        # If top_k column is missing (older format), all non-baseline rows are ablation
+
         abl_rag = k_ablation_df[k_ablation_df["retriever"] != "no_rag"].copy()
 
-    # Merge the small k_ablation_local.csv (extra runs) if it exists
+
     k_local_csv = RESULTS_DIR / "k_ablation_local.csv"
     if k_local_csv.exists():
         k_local = pd.read_csv(k_local_csv)
@@ -289,7 +275,7 @@ def build_180_matrix(main_df: pd.DataFrame,
 
     abl_rag = abl_rag.assign(run_type="Top-k Ablation")
 
-    # ── Normalise columns across the three segments ───────────────────────
+
     keep_cols = ["run_type", "dataset", "model", "chunk_size", "retriever",
                  "top_k", "em", "f1", "distraction_ratio", "n_samples"]
 
@@ -307,9 +293,7 @@ def build_180_matrix(main_df: pd.DataFrame,
                     df[col] = None
         return df[keep_cols]
 
-    # ── Compose the final 180-run ledger ─────────────────────────────
-    # Cast chunk_size to str to prevent dtype mismatch ("256" vs 256) across
-    # files (k_ablation_local.csv stores int; k_ablation.csv stores str).
+
     baseline_norm = _normalise(baseline_rows, expected_top_k=0)
     baseline_norm["chunk_size"] = baseline_norm["chunk_size"].astype(str)
     baseline_norm = baseline_norm.drop_duplicates(
@@ -330,7 +314,7 @@ def build_180_matrix(main_df: pd.DataFrame,
 
     combined = pd.concat([baseline_norm, rag_norm, abl_norm], ignore_index=True)
 
-    # Sort for readability
+
     retriever_order = {"no_rag": 0, "bm25": 1, "faiss": 2}
     combined["_ret_ord"] = combined["retriever"].map(retriever_order).fillna(3)
     combined = combined.sort_values(
@@ -340,7 +324,6 @@ def build_180_matrix(main_df: pd.DataFrame,
     return combined
 
 
-# ── Verification summary ─────────────────────────────────────────────────────
 def print_verification(df108: pd.DataFrame) -> None:
     """Print the terminal verification summary required by the task spec."""
     total = len(df108)
@@ -365,7 +348,7 @@ def print_verification(df108: pd.DataFrame) -> None:
     print(f"  Target hurt  : ~{target_hurt}  (~1.9%)   → {'✓ PASS' if hurt  == target_hurt  else f'✗ GOT {hurt}'}")
     print("═" * 65 + "\n")
 
-    # Also print the z-test based FDR-adjusted counts for transparency
+
     alpha = 0.05
     sig_holm = (df108["pval_holm_adjusted"] < alpha).sum()
     sig_bh   = (df108["pval_fdr_bh_adjusted"] < alpha).sum()
@@ -379,7 +362,6 @@ def print_verification(df108: pd.DataFrame) -> None:
     print("═" * 65 + "\n")
 
 
-# ── Main ─────────────────────────────────────────────────────────────────────
 def main() -> None:
     print("\n" + "═" * 65)
     print("  generate_audit_tables.py  —  IEEE SILCON 2026, Paper #593")
@@ -387,25 +369,25 @@ def main() -> None:
 
     RESULTS_DIR.mkdir(exist_ok=True)
 
-    # 1. Load saved aggregate results (no inference calls!)
+
     main_df, k_ablation_df, retrieval_df = load_results()
 
-    # 2. Build the 108-comparison table
+
     print("\n[build] Constructing 108-row RAG-vs-baseline comparison table …")
     df108 = build_108_table(main_df, retrieval_df)
     df108.to_csv(OUT_108, index=False)
     print(f"[save]  → {OUT_108}  ({len(df108)} rows)")
 
-    # 3. Build the 180-run full experiment matrix
+
     print("\n[build] Constructing 180-run full experiment ledger …")
     df180 = build_180_matrix(main_df, k_ablation_df)
     df180.to_csv(OUT_180, index=False)
     print(f"[save]  → {OUT_180}  ({len(df180)} rows)")
 
-    # 4. Verification summary (printed to stdout)
+
     print_verification(df108)
 
-    # 5. Quick sanity check on the 180-run ledger
+
     run_counts = df180["run_type"].value_counts()
     print("  Full 180-run ledger breakdown:")
     for run_type, cnt in run_counts.items():

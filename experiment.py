@@ -42,11 +42,9 @@ def _flush_memory() -> None:
         torch.cuda.empty_cache()
 
 
-
 PARTIAL = RESULTS_DIR / "results_partial.csv"
 FINAL   = RESULTS_DIR / "results.csv"
 PER_QUESTION_DIR = RESULTS_DIR / "per_question_preds"
-
 
 
 def _migrate_csv(path: Path) -> None:
@@ -87,7 +85,6 @@ def _save(results: list[dict]) -> None:
     pd.DataFrame(results).to_csv(PARTIAL, index=False)
 
 
-
 def run_baseline(dataset_name: str, model_name: str, samples: list[dict],
                  save_per_question_preds: bool = True) -> tuple[dict, list[int]]:
     em_list, f1_list = [], []
@@ -122,7 +119,6 @@ def run_baseline(dataset_name: str, model_name: str, samples: list[dict],
         "n_samples":         len(samples),
     }
     return summary_row, em_list
-
 
 
 def run_rag(dataset_name: str, model_name: str, samples: list[dict],
@@ -173,11 +169,8 @@ def run_rag(dataset_name: str, model_name: str, samples: list[dict],
             "em_binary": em_list,
         }
         if baseline_em_list is not None and len(baseline_em_list) == len(em_list):
-            # Compute 2x2 contingency matrix:
-            # n11: baseline=1, rag=1 (both correct)
-            # n10: baseline=1, rag=0 (baseline correct, RAG destroyed/distracted)
-            # n01: baseline=0, rag=1 (baseline wrong, RAG helped)
-            # n00: baseline=0, rag=0 (both incorrect)
+
+
             n11 = sum(1 for b, r in zip(baseline_em_list, em_list) if b == 1 and r == 1)
             n10 = sum(1 for b, r in zip(baseline_em_list, em_list) if b == 1 and r == 0)
             n01 = sum(1 for b, r in zip(baseline_em_list, em_list) if b == 0 and r == 1)
@@ -204,7 +197,6 @@ def run_rag(dataset_name: str, model_name: str, samples: list[dict],
         "distraction_ratio": round(distraction_ratio(baseline_em, avg_em), 4),
         "n_samples":         len(samples),
     }
-
 
 
 def run_experiment(only_dataset: str | None = None,
@@ -254,7 +246,7 @@ def run_experiment(only_dataset: str | None = None,
                     sys.exit(99)
             else:
                 print(f"\n[skip] Baseline already done: [{dataset_name}] {model_name}")
-                # Try to load existing per-question baseline predictions if available
+
                 base_pred_file = PER_QUESTION_DIR / f"{dataset_name}_{model_name}_baseline.json"
                 if base_pred_file.exists():
                     try:
